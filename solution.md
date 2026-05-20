@@ -254,3 +254,106 @@ FROM active_users), 0), 2) AS conversion_active_to_buyer;
 -доступ к премиум-задачам и расширенным тестам
 -снятие лимита на количество задач/тестов в день ( если он есть)
 Годовая подписка включает все тоже самое, что месячная, но дешевле в расчете за месяц.
+
+**Дополнительное задание 2**
+
+Для выгрузки данных используем SQL-запрос:
+```sql
+SELECT 'code_submit' AS event_type, user_id, created_at FROM codesubmit
+UNION ALL
+SELECT 'test_start', user_id, created_at FROM teststart order by created_at;
+```
+Для загрузки данных, построения графика, столбцов по дням и тепловой карты, используем такой код:
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+
+# ------------------------------
+# 1. Загрузка данных
+# ------------------------------
+
+df = pd.read_csv('C:/Users/mzayn/_SELECT_code_submit_AS_event_type_user_id_created_at_FROM_codesu_202605201610.csv', parse_dates=['created_at'])
+
+# Посмотрим на первые строки для проверки
+print(df.head())
+print(f"Всего записей: {len(df)}")
+
+# ------------------------------
+# 2. Извлечение признаков времени
+# ------------------------------
+# Часы от 0 до 23
+df['hour'] = df['created_at'].dt.hour
+# День недели: 0 = понедельник, 6 = воскресенье
+df['weekday'] = df['created_at'].dt.dayofweek
+# Названия дней для подписей на графиках
+weekday_names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+# ------------------------------
+# 3. Построение графиков
+# ------------------------------
+# Устанавливаем стиль seaborn для более приятного вида
+sns.set_style('whitegrid')
+plt.rcParams['figure.figsize'] = (12, 6)
+
+# ----- График 1: Распределение активности по часам суток -----
+plt.figure()
+# Гистограмма с ядерной оценкой плотности (kde)
+sns.histplot(df['hour'], bins=24, kde=True, color='skyblue', edgecolor='black')
+plt.title('Активность пользователей по часам суток (все события)', fontsize=14)
+plt.xlabel('Час (0–23)', fontsize=12)
+plt.ylabel('Количество событий', fontsize=12)
+plt.xticks(range(0, 24, 2)) # подписи через каждые 2 часа
+plt.grid(axis='y', alpha=0.3)
+plt.tight_layout()
+plt.savefig('activity_by_hour.png', dpi=150)
+plt.show()
+
+# ----- График 2: Активность по дням недели (столбчатая диаграмма) -----
+plt.figure()
+# Подсчитываем количество событий по дням недели и строим столбцы в правильном порядке
+order = range(7)
+sns.countplot(x='weekday', data=df, order=order, palette='viridis', edgecolor='black')
+plt.title('Активность пользователей по дням недели', fontsize=14)
+plt.xlabel('День недели', fontsize=12)
+plt.ylabel('Количество событий', fontsize=12)
+plt.xticks(ticks=order, labels=weekday_names)
+plt.grid(axis='y', alpha=0.3)
+plt.tight_layout()
+plt.savefig('activity_by_weekday.png', dpi=150)
+plt.show()
+
+# ----- График 3: Тепловая карта (день недели × час) -----
+plt.figure(figsize=(14, 7))
+# Строим сводную таблицу: строки - дни недели, столбцы - часы
+pivot = pd.crosstab(df['weekday'], df['hour'])
+sns.heatmap(pivot, cmap='YlOrRd', annot=False, cbar_kws={'label': 'Число событий'})
+plt.title('Тепловая карта активности: день недели vs час', fontsize=14)
+plt.xlabel('Час суток', fontsize=12)
+plt.ylabel('День недели', fontsize=12)
+# Подписываем строки названиями дней
+plt.yticks(ticks=range(7), labels=weekday_names, rotation=0)
+plt.tight_layout()
+plt.savefig('heatmap_activity.png', dpi=150)
+plt.show()
+
+# ------------------------------
+# 4. Дополнительная аналитика для выводов
+# ------------------------------
+# Находим час с максимальной активностью
+peak_hour = df['hour'].mode()[0]
+# День с максимальной активностью
+peak_weekday = df['weekday'].mode()[0]
+# Час с минимальной активностью
+low_hour = df['hour'].value_counts().idxmin()
+# День с минимальной активностью
+low_weekday = df['weekday'].value_counts().idxmin()
+
+print(f"\n=== Статистика ===")
+print(f"Пик активности: {weekday_names[peak_weekday]}, {peak_hour}:00")
+print(f"Минимум активности: {weekday_names[low_weekday]}, {low_hour}:00")
+print(f"Среднее число событий в час: {df['hour'].value_counts().mean():.1f}")
+print(f"Среднее число событий в день недели: {df['weekday'].value_counts().mean():.1f}")
+```
+**Выводы:** Рекомендую проводить релизы в субботу  в 2:00, потому что наблюдается абсолютный минимум активности, резервное окно можно использовать в воскресенье с 3:00 до 5:00 - низкая активность. Категорически не рекомендую использовать время проведения релизов вторник-четверг с 10:00 до 17:00 - высокая активность.
